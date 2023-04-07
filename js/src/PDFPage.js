@@ -27,8 +27,40 @@ export type ImageAction = {
   height?: number,
 };
 
+export type MoveToAction = {
+  type: 'moveTo',
+  x: number,
+  y: number,
+  color?: string,
+  strokeWidth?: number,
+};
+
+export type LineToAction = {
+  type: 'lineTo',
+  x: number,
+  y: number,
+  color?: string,
+  strokeWidth?: number,
+};
+
+export type StrokeAction = {
+  type: 'stroke'
+};
+
+export type TransformAction = {
+  type: 'transform'
+};
+
+export type SaveGraphicsStateAction = {
+  type: 'saveGraphicsState'
+};
+
+export type RestoreGraphicsStateAction = {
+  type: 'restoreGraphicsState'
+};
+
 export type PageActions =
-    TextAction
+  TextAction
   | RectangleAction
   | ImageAction
   ;
@@ -77,7 +109,7 @@ export default class PDFPage {
   setMediaBox = (
     width: number,
     height: number,
-    options: { x?: number, y?: number }={},
+    options: { x?: number, y?: number } = {},
   ) => {
     if (this.page.pageIndex !== undefined) {
       throw new Error('Cannot set media box on modified page!');
@@ -99,7 +131,7 @@ export default class PDFPage {
       y?: number,
       color?: string,
       fontSize?: number,
-    }={}
+    } = {}
   ) => {
     const textAction: TextAction = {
       x: 0,
@@ -122,7 +154,7 @@ export default class PDFPage {
       width?: number,
       height?: number,
       color?: string,
-    }={}
+    } = {}
   ) => {
     const rectAction: RectangleAction = {
       x: 0,
@@ -138,15 +170,15 @@ export default class PDFPage {
   }
 
   drawImage = (
-      imagePath: string,
-      imageType: string,
-      options: {
-        x?: number,
-        y?: number,
-        width?: number,
-        height?: number,
-        imageSource?: string
-      }={}
+    imagePath: string,
+    imageType: string,
+    options: {
+      x?: number,
+      y?: number,
+      width?: number,
+      height?: number,
+      imageSource?: string
+    } = {}
   ) => {
     // TODO: Add logic using ReactNative.Image to automatically preserve image
     // dimensions!
@@ -168,4 +200,93 @@ export default class PDFPage {
     this.page.actions.push(imageAction);
     return this;
   }
+
+  drawMove = (
+    options: {
+      x?: number,
+      y?: number,
+      color?: string,
+      strokeWidth?: number;
+    } = {}
+  ) => {
+    const moveToAction: MoveToAction = {
+      x: 0,
+      y: 0,
+      color: '#000000',
+      strokeWidth: 2,
+      ...options,
+      type: 'moveTo',
+    };
+    this.page.actions.push(moveToAction);
+    return this;
+  }
+
+  drawLine = (
+    options: {
+      x?: number,
+      y?: number,
+      color?: string,
+      strokeWidth?: number;
+    } = {}
+  ) => {
+    const lineToAction: LineToAction = {
+      x: 0,
+      y: 0,
+      color: '#000000',
+      strokeWidth: 2,
+      ...options,
+      type: 'lineTo',
+    };
+    this.page.actions.push(lineToAction);
+    return this;
+  }
+
+  stroke = (
+    options: {
+    } = {}
+  ) => {
+    const strokeAction: StrokeAction = {
+      ...options,
+      type: 'stroke',
+    };
+    this.page.actions.push(strokeAction);
+    return this;
+  }
+
+  transform = (
+    options: {
+    } = {}
+  ) => {
+    const transformAction: TransformAction = {
+      ...options,
+      type: 'transform',
+    };
+    this.page.actions.push(transformAction);
+    return this;
+  }
+
+  saveGraphicsState = (
+    options: {
+    } = {}
+  ) => {
+    const saveGraphicsStateAction: SaveGraphicsStateAction = {
+      ...options,
+      type: 'saveGraphicsState',
+    };
+    this.page.actions.push(saveGraphicsStateAction);
+    return this;
+  }
+
+  restoreGraphicsState = (
+    options: {
+    } = {}
+  ) => {
+    const restoreGraphicsStateAction: RestoreGraphicsStateAction = {
+      ...options,
+      type: 'restoreGraphicsState',
+    };
+    this.page.actions.push(restoreGraphicsStateAction);
+    return this;
+  }
+
 }

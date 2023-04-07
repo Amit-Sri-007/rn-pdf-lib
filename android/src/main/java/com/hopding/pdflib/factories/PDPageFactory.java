@@ -21,6 +21,7 @@ import com.tom_roush.pdfbox.pdmodel.font.PDType0Font;
 import com.tom_roush.pdfbox.pdmodel.graphics.image.JPEGFactory;
 import com.tom_roush.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import com.tom_roush.pdfbox.util.Matrix;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -39,6 +40,8 @@ public class PDPageFactory {
     protected PDDocument document;
     protected PDPage page;
     protected PDPageContentStream stream;
+
+    protected boolean isTransformed;
     private static AssetManager ASSET_MANAGER = null;
 
     public static void init(Context context) {
@@ -119,6 +122,19 @@ public class PDPageFactory {
                 this.drawRectangle(action);
             else if (type.equals("image"))
                 this.drawImage(action);
+            else if (type.equals("moveTo"))
+                this.drawMove(action);
+            else if (type.equals("lineTo"))
+                this.drawLine(action);
+            else if (type.equals("stroke"))
+                this.stroke();
+            else if (type.equals("transform"))
+                this.transform();
+            else if (type.equals("saveGraphicsState"))
+                this.saveGraphicsState();
+            else if (type.equals("restoreGraphicsState"))
+                this.restoreGraphicsState();
+
         }
     }
 
@@ -130,10 +146,12 @@ public class PDPageFactory {
 
     private void drawText(String value, String fontName, int fontSize, String textAlign, int fieldSize,
             Integer[] coords, int[] rgbColor, PDFont font) throws NoSuchKeyException, IOException {
+
         int offsetLeft = coords[0];
 
+        WritableMap textSize = PDPageFactory.getTextSize(value, font, fontSize);
+
         if (fieldSize > 0 && textAlign != "left") {
-            WritableMap textSize = PDPageFactory.getTextSize(value, font, fontSize);
 
             switch (textAlign) {
                 case "center":
@@ -150,12 +168,30 @@ public class PDPageFactory {
             }
         }
 
+        float x = offsetLeft;
+        float y = coords[1];
+
+        if(isTransformed){
+            stream.saveGraphicsState();
+            stream.transform(Matrix.getScaleInstance(1, -1));
+//            float capHeight = font.getFontDescriptor().getCapHeight();
+//            float textHeight = capHeight / 1000 * fontSize;
+            float textHeight = (float)textSize.getDouble("height");
+            y=-y-textHeight;
+        }
+
+
+
         stream.beginText();
         stream.setNonStrokingColor(rgbColor[0], rgbColor[1], rgbColor[2]);
         stream.setFont(font, fontSize);
-        stream.newLineAtOffset(offsetLeft, coords[1]);
+        stream.newLineAtOffset(x, y);
         stream.showText(value);
         stream.endText();
+
+        if(isTransformed){
+            stream.restoreGraphicsState();
+        }
     }
 
     private void drawRectangle(ReadableMap rectActions) throws NoSuchKeyException, IOException {
@@ -166,6 +202,46 @@ public class PDPageFactory {
         stream.addRect(coords[0], coords[1], dims[0], dims[1]);
         stream.setNonStrokingColor(rgbColor[0], rgbColor[1], rgbColor[2]);
         stream.fill();
+    }
+
+    private void drawMove(ReadableMap rectActions) throws NoSuchKeyException, IOException {
+        Double[] coords = getCoordsFloat(rectActions, true);
+        int[] rgbColor = hexStringToRGB(rectActions.getString("color"));
+        float strokeWidth = rectActions.getInt("strokeWidth");
+        stream.setLineWidth(strokeWidth);
+        stream.setStrokingColor(rgbColor[0], rgbColor[1], rgbColor[2]);
+        stream.moveTo(coords[0].floatValue(), coords[1].floatValue());
+
+    }
+
+    private void drawLine(ReadableMap rectActions) throws NoSuchKeyException, IOException {
+        Double[] coords = getCoordsFloat(rectActions, true);
+        int[] rgbColor = hexStringToRGB(rectActions.getString("color"));
+        float strokeWidth = rectActions.getInt("strokeWidth");
+        stream.setLineWidth(strokeWidth);
+        stream.setStrokingColor(rgbColor[0], rgbColor[1], rgbColor[2]);
+        stream.lineTo(coords[0].floatValue(), coords[1].floatValue());
+    }
+
+    private void saveGraphicsState() throws NoSuchKeyException, IOException {
+        stream.saveGraphicsState();
+    }
+
+    private void restoreGraphicsState() throws NoSuchKeyException, IOException {
+        stream.restoreGraphicsState();
+        isTransformed = false;
+    }
+
+    private void transform() throws NoSuchKeyException, IOException {
+
+        stream.transform(Matrix.getTranslateInstance(0, page.getMediaBox().getHeight()));
+        stream.transform(Matrix.getScaleInstance(1,-1));
+//        stream.transform(Matrix.getTranslateInstance(0, -page.getMediaBox().getHeight()));
+        isTransformed = true;
+    }
+
+    private void stroke() throws NoSuchKeyException, IOException{
+        stream.stroke();
     }
 
     private void drawImage(ReadableMap imageActions) throws NoSuchKeyException, IOException {
@@ -197,11 +273,35 @@ public class PDPageFactory {
                 image = LosslessFactory.createFromImage(document, bmp);
             }
 
-            // Draw the PDImageXObject to the stream
+            float x = coords[0];
+            float y = coords[1];
+            float width = image.getWidth();
+            float height = image.getHeight();
+
             if (dims[0] != null && dims[1] != null) {
-                stream.drawImage(image, coords[0], coords[1], dims[0], dims[1]);
-            } else {
-                stream.drawImage(image, coords[0], coords[1]);
+                width=dims[0];
+                height=dims[1];
+            }
+            if(isTransformed){
+                stream.saveGraphicsState();
+                stream.transform(Matrix.getScaleInstance(1, -1));
+                y=-y-height;
+            }
+
+            // Draw the PDImageXObject to the stream
+            if(width > 0 && height >0){
+                stream.drawImage(image, x, y, width, height);
+            }else{
+                stream.drawImage(image, x, y);
+            }
+//            if (dims[0] != null && dims[1] != null) {
+//                stream.drawImage(image, coords[0], -coords[1]-dims[1], dims[0], dims[1]);
+//            } else {
+//                stream.drawImage(image, coords[0], -coords[1]-image.getHeight());
+//            }
+            if(isTransformed){
+//                stream.transform(Matrix.getScaleInstance(1, 1));
+                stream.restoreGraphicsState();
             }
         }
     }
@@ -235,6 +335,10 @@ public class PDPageFactory {
         return getIntegerKeyPair(coordsMap, "x", "y", required);
     }
 
+    private static Double[] getCoordsFloat(ReadableMap coordsMap, boolean required) {
+        return getFloatKeyPair(coordsMap, "x", "y", required);
+    }
+
     private static Integer[] getIntegerKeyPair(ReadableMap map, String key1, String key2, boolean required) {
         Integer val1 = null;
         Integer val2 = null;
@@ -248,11 +352,31 @@ public class PDPageFactory {
         return new Integer[] { val1, val2 };
     }
 
+    private static Double[] getFloatKeyPair(ReadableMap map, String key1, String key2, boolean required) {
+        Double val1 = null;
+        Double val2 = null;
+        try {
+            val1 = map.getDouble(key1);
+            val2 = map.getDouble(key2);
+        } catch (NoSuchKeyException e) {
+            if (required)
+                throw e;
+        }
+        return new Double[] { val1, val2 };
+    }
+
     // We get a color as a hex string, e.g. "#F0F0F0" - so parse into RGB vals
     private static int[] hexStringToRGB(String hexString) {
         int colorR = Integer.valueOf(hexString.substring(1, 3), 16);
         int colorG = Integer.valueOf(hexString.substring(3, 5), 16);
         int colorB = Integer.valueOf(hexString.substring(5, 7), 16);
         return new int[] { colorR, colorG, colorB };
+    }
+
+    private static float[] hexStringToRGBFloat(String hexString) {
+        float colorR = Integer.valueOf(hexString.substring(1, 3), 16);
+        float colorG = Integer.valueOf(hexString.substring(3, 5), 16);
+        float colorB = Integer.valueOf(hexString.substring(5, 7), 16);
+        return new float[] { colorR, colorG, colorB };
     }
 }
